@@ -36,7 +36,49 @@ The **CLAUD agent** ships with the Claude Analytics widget:
 
 ---
 
-## 2. Technology and Platform Negotiation
+## 2. Parallel Pipeline Awareness
+
+This skill may be invoked in two ways:
+
+**A — Standalone:** The developer wants to build an agent only (no widget). Follow this
+skill linearly from Section 3 onwards.
+
+**B — Parallel (most common):** This skill was invoked from within a widget pipeline
+because the widget requires host filesystem or OS access. Both the widget and agent
+pipelines are running simultaneously in the same conversation.
+
+When running in parallel:
+- Design decisions made in the widget pipeline carry into this pipeline and vice versa.
+- **Integration convergence points** — the following questions involve both pipelines
+  and must be answered together:
+  - **Port assignment** — the agent's port must not conflict with the widget's port.
+    Both ports are drawn from the same occupied port set.
+  - **Data contract** — agree on the exact endpoint paths and response schemas the
+    widget will call on the agent. Define these jointly so both sides implement the
+    same interface.
+  - **`host.docker.internal` reference** — the widget container calls the agent at
+    `host.docker.internal:<agent-port>`. Confirm this address is used in the widget
+    source (not `localhost`, which resolves to the container itself).
+  - **Health check** — the widget detects agent availability at startup via
+    `GET host.docker.internal:<agent-port>/health`. Agree on the response format.
+- When a convergence point is reached, ask the questions that cover both pipelines
+  together rather than separately.
+
+**Companion agent pattern:**
+
+A companion agent is one that ships alongside a specific widget and is primarily designed
+to serve that widget. Characteristics:
+- Named after the widget: `wcp-agent-<widget-name>` or `<widget-name>-agent`
+- The widget's Settings component hosts the agent installer download
+  (served from the widget container at `GET /widget/agent/installer`)
+- The widget degrades gracefully when the agent is not present, with a clear UI prompt
+  in the Settings component to download and install it
+- The agent installer is bundled inside the widget's Docker image
+
+---
+
+## 3. Technology and Platform Negotiation
+
 
 Follow the **Technology Negotiation Pattern** defined in
 [wcp-ai-build AI-SKILL.md Section 2](https://github.com/penrithbeacon/wcp-ai-build/blob/main/AI-SKILL.md).
@@ -50,12 +92,12 @@ Resolve platform first — language options differ by platform.
 - Windows (x86_64)
 - Multiple platforms (common for agents intended for broad distribution)
 
-Once the platform is confirmed, route to the platform-specific skill (Section 4). The
+Once the platform is confirmed, route to the platform-specific skill (Section 5). The
 platform skill handles the language/runtime negotiation for that platform.
 
 ---
 
-## 3. Skill: Design the Agent
+## 4. Skill: Design the Agent
 
 Establish the design intent before routing to a platform skill. Work through these phases:
 
@@ -115,7 +157,7 @@ Before routing to the platform skill, confirm:
 
 ---
 
-## 4. Platform Resolution
+## 5. Platform Resolution
 
 Route to the platform-specific skill based on the developer's answer:
 
@@ -128,7 +170,7 @@ Route to the platform-specific skill based on the developer's answer:
 
 ---
 
-## 5. What Carries Forward to the Platform Skill
+## 6. What Carries Forward to the Platform Skill
 
 The platform skill will ask for these outputs. Have them ready:
 
@@ -140,3 +182,6 @@ The platform skill will ask for these outputs. Have them ready:
 | Communication port | `3749` |
 | Persistent state | "Config file at `~/.my-widget-agent/config.json`" or "None" |
 | Platform(s) confirmed | "macOS (Apple Silicon)" |
+| Companion widget name | `wcp-widget-<name>` (if this is a companion agent) |
+| GitHub username + PAT | Carried from wcp-ai-build Step 1 |
+| Credentials file path | Carried from wcp-ai-build Step 1 |
