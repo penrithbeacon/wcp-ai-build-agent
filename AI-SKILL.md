@@ -77,7 +77,8 @@ The standard WCP agent communication pattern is a **local HTTP API on loopback**
 Confirm:
 1. Is the local HTTP API pattern appropriate? (Yes for almost all cases.)
 2. Port number — must not conflict with widget container ports or other agents.
-   Known occupied ports: 3738–3745 (widgets), 3747 (CLAUD agent). Suggest 3748+.
+   Use the occupied port set recorded in wcp-ai-build Step 1 (from Bonjour query or
+   developer-provided list). Do not assume any port is free — check against that set.
 3. Does any endpoint need to accept data FROM the widget (POST), or is this a read-only
    data source (GET only)?
 
