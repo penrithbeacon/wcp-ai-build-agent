@@ -129,21 +129,67 @@ Confirm:
 Define the agent's endpoint list:
 
 1. **Health endpoint** — mandatory:
-   `GET /health` → `{ "status": "ok", "name": "...", "version": "..." }`
+   `GET /health` → `{ "status": "ok", "name": "...", "version": "...", "platform": "..." }`
 
-2. **Data endpoints** — one or more `GET` endpoints returning JSON data to the widget.
+2. **Agent WCP manifest** — mandatory:
+   `GET /agent/wcp` → JSON manifest describing the agent. Analogous to `GET /widget/wcp`
+   for widgets. Must include:
+   ```json
+   {
+     "name": "<agent-name>",
+     "version": "<semver>",
+     "platform": "<macOS|Linux|Windows>",
+     "port": <port>,
+     "endpoints": ["GET /health", "GET /agent/wcp", "..."],
+     "companion_widget": "<wcp-widget-name>"
+   }
+   ```
+   The `companion_widget` field is required for companion agents; omit for standalone agents.
+
+3. **WCP logs endpoint** — mandatory:
+   `GET /agent/logs` → WCP logs protocol envelope:
+   ```json
+   {
+     "schema": "wcp-logs/1.0",
+     "name": "<agent-name>",
+     "entries": [
+       { "ts": "<ISO8601Z>", "level": "info|warn|error", "msg": "..." }
+     ]
+   }
+   ```
+   Support `?limit=N`, `?level=info|warn|error`, `?since=<ISO8601Z>`.
+   In-memory ring buffer, max 500 entries. Always returns 200.
+
+4. **Bonjour registration** — mandatory startup behaviour:
+   On startup, the agent must attempt to register itself with the WCP Bonjour Proxy at
+   `POST http://127.0.0.1:3746/agent/register` with body:
+   ```json
+   {
+     "name": "<agent-name>",
+     "port": <port>,
+     "health": "/health",
+     "companion_widget": "<wcp-widget-name>",
+     "platform": "<platform>"
+   }
+   ```
+   Registration must be attempted in a **background thread** so it does not block agent
+   startup. Use **exponential backoff retry** (suggested: up to 10 attempts, starting at
+   2 seconds, doubling each time, max 60 seconds between attempts). The agent operates
+   fully if the proxy is not running — registration failure is not fatal.
+
+5. **Data endpoints** — one or more `GET` endpoints returning JSON data to the widget.
    For each, define: path, what it returns, how it is obtained (read file, run command,
    call OS API, query local DB, etc.)
 
-3. **Control endpoints** — optional `POST` endpoints if the widget needs to trigger
+6. **Control endpoints** — optional `POST` endpoints if the widget needs to trigger
    host actions. For each: path, what action it performs, what it returns.
 
-4. **Persistent state** — does the agent need to remember configuration or state between
+7. **Persistent state** — does the agent need to remember configuration or state between
    restarts? If yes: a config file or local database (path under the user's home directory
    or a well-known config directory).
 
-5. **Auto-start** — required for production use. The agent must start automatically at
-   user login. The mechanism is platform-specific (Section 4).
+8. **Auto-start** — required for production use. The agent must start automatically at
+   user login. The mechanism is platform-specific (Section 5).
 
 ### Phase D — Confirm outputs
 
@@ -170,7 +216,26 @@ Route to the platform-specific skill based on the developer's answer:
 
 ---
 
-## 6. What Carries Forward to the Platform Skill
+## 6. Release Pipeline — End State
+
+The platform skill (Section 5) is not the final step. When the platform skill completes
+its build and test steps, it will hand off to the **wcp-ai-release pipeline**.
+
+The full chain is:
+
+```
+wcp-ai-build → wcp-ai-build-agent → wcp-ai-build-agent-{platform} → wcp-ai-release
+```
+
+The release pipeline runs the pre-release audit (endpoint checks, Bonjour registration
+verification, loopback binding verification), generates documentation (README.md,
+specification.md), and publishes the agent installer to GitHub Releases.
+
+**The agent build is not done until wcp-ai-release has passed its audit gate.**
+
+---
+
+## 7. What Carries Forward to the Platform Skill
 
 The platform skill will ask for these outputs. Have them ready:
 
