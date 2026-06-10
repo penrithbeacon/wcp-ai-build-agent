@@ -161,8 +161,24 @@ Define the agent's endpoint list:
    In-memory ring buffer, max 500 entries. Always returns 200.
 
 4. **Bonjour registration** — mandatory startup behaviour:
-   On startup, the agent must attempt to register itself with the WCP Bonjour Proxy at
-   `POST http://127.0.0.1:3746/agent/register` with body:
+
+   On startup, the agent must discover the Bonjour agent's actual port and register with
+   it. The Bonjour agent's port is **not fixed** — do not hardcode it. Discover it from
+   the port advertisement file:
+
+   ```
+   ~/Library/Application Support/penrithbeacon/bonjour-agent.port
+   ```
+
+   This file contains the Bonjour agent's actual bound port as a plain integer. Read it
+   at registration time (not at startup) so the agent does not fail if Bonjour has not
+   yet written the file.
+
+   Once the port is known, register at:
+   ```
+   POST http://127.0.0.1:<bonjour-agent-port>/agent/register
+   ```
+   with body:
    ```json
    {
      "name": "<agent-name>",
@@ -172,10 +188,31 @@ Define the agent's endpoint list:
      "platform": "<platform>"
    }
    ```
+
+   **Python pattern for port file discovery:**
+   ```python
+   import os, pathlib
+
+   BONJOUR_PORT_FILE = pathlib.Path.home() / "Library" / "Application Support" \
+                       / "penrithbeacon" / "bonjour-agent.port"
+
+   def get_bonjour_port():
+       try:
+           return int(BONJOUR_PORT_FILE.read_text().strip())
+       except Exception:
+           return None
+   ```
+
    Registration must be attempted in a **background thread** so it does not block agent
    startup. Use **exponential backoff retry** (suggested: up to 10 attempts, starting at
    2 seconds, doubling each time, max 60 seconds between attempts). The agent operates
-   fully if the proxy is not running — registration failure is not fatal.
+   fully if the Bonjour agent is not running or the port file does not yet exist —
+   registration failure is not fatal.
+
+   > **Historical note:** early agents (e.g. the markdown editor companion agent before
+   > Bonjour was built) hardcoded `127.0.0.1:3746` as a placeholder Bonjour address.
+   > That was a beta placeholder. Any agent that still hardcodes a Bonjour port must be
+   > updated to use the port file discovery pattern before it can leave beta.
 
 5. **Data endpoints** — one or more `GET` endpoints returning JSON data to the widget.
    For each, define: path, what it returns, how it is obtained (read file, run command,
